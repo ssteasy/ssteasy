@@ -1,0 +1,29 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+// database/migrations/xxxx_xx_xx_create_paises_table.php
+Schema::create('paises', function (Blueprint $table) {
+    $table->string('codigo', 10)->primary();    // código DANE o ISO
+    $table->string('nombre');
+    $table->timestamps();
+});
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('pais');
+    }
+};

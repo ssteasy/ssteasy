@@ -1,0 +1,43 @@
+<?php
+namespace Database\Seeders;
+// database/seeders/RolesAndPermissionsSeeder.php
+use Illuminate\Database\Seeder;
+use Spatie\Permission\Models\Role;
+use Spatie\Permission\Models\Permission;
+
+class RolesAndPermissionsSeeder extends Seeder
+{
+    public function run(): void
+    {
+        // Limpiar cache
+        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+
+        // Crear permisos base
+        Permission::create(['name' => 'ver usuarios']);
+        Permission::create(['name' => 'crear usuarios']);
+        Permission::create(['name' => 'editar usuarios']);
+        Permission::create(['name' => 'eliminar usuarios']);
+        Permission::create(['name' => 'gestionar empresa']);
+        Permission::create(['name' => 'ver dashboard']);
+        Permission::create(['name' => 'ver modulos sst']);
+
+        // Crear roles
+        $superadmin = Role::create(['name' => 'superadmin']);
+        $admin = Role::create(['name' => 'admin']);
+        $colaborador = Role::create(['name' => 'colaborador']);
+
+        // Asignar permisos
+        $superadmin->givePermissionTo(Permission::all());
+        $admin->givePermissionTo([
+            'ver usuarios',
+            'crear usuarios',
+            'editar usuarios',
+            'ver dashboard',
+            'ver modulos sst',
+        ]);
+        $colaborador->givePermissionTo([
+            'ver dashboard',
+            'ver modulos sst',
+        ]);
+    }
+}

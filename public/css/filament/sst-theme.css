@@ -1,0 +1,27 @@
+/* resources/css/filament/sst-theme.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --filament-color-primary-50: #e4eff8;
+    --filament-color-primary-100: #d0e6f3;
+    --filament-color-primary-200: #a9d6ec;
+    --filament-color-primary-300: #4DB2E1; /* azul medio */
+    --filament-color-primary-400: #3a97c5;
+    --filament-color-primary-500: #11456D; /* azul oscuro */
+    --filament-color-primary-600: #0c3658;
+    --filament-color-primary-700: #082742;
+    --filament-color-primary-800: #04182d;
+    --filament-color-primary-900: #010a18;
+
+    --filament-bg: #DDF3FF; /* azul claro fondo */
+    --filament-bg-white: #FFFFFF;
+    --filament-text-gray: #3D3D3D;
+
+    /* Personalizados */
+    --sst-yellow: #F5D443;
+    --sst-text-dark: #11456D;
+  }
+}

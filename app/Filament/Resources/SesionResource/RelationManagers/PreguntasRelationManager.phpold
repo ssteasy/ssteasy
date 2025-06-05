@@ -1,0 +1,90 @@
+<?php
+
+namespace App\Filament\Resources\SesionResource\RelationManagers;
+
+use Filament\Forms;
+use Filament\Forms\Components\{Select, Textarea, TextInput, Toggle, Repeater};
+use Filament\Tables;
+use Filament\Tables\Columns\{TextColumn, IconColumn};
+use Filament\Tables\Actions;
+use Filament\Resources\RelationManagers\RelationManager;   // ← IMPORT CORRECTO
+use Illuminate\Database\Eloquent\Model;
+
+class PreguntasRelationManager extends RelationManager
+{
+    protected static string $relationship = 'preguntas';
+    protected static ?string $recordTitleAttribute = 'enunciado';
+
+    public function form(Forms\Form $form): Forms\Form
+    {
+        return $form->schema([
+            Select::make('tipo')
+                ->label('Tipo de pregunta')
+                ->options([
+                    'unica'    => 'Selección única',
+                    'multiple' => 'Selección múltiple',
+                    'vf'       => 'Verdadero / Falso',
+                    'abierta'  => 'Abierta',
+                ])
+                ->required()
+                ->reactive(),
+
+            Textarea::make('enunciado')
+                ->required()
+                ->rows(3)
+                ->columnSpanFull(),
+
+            Repeater::make('opciones')
+                ->relationship()
+                ->label('Opciones')
+                ->visible(fn (Forms\Get $get) =>
+                    in_array($get('tipo'), ['unica','multiple','vf'])
+                )
+                ->schema([
+                    TextInput::make('texto')
+                        ->label('Texto de la opción')
+                        ->required()
+                        ->columnSpan(2),
+
+                    Toggle::make('es_correcta')
+                        ->label('Correcta')
+                        ->inline(false),
+                ])
+                ->columns(3)
+                ->minItems(2)
+                ->addActionLabel('Agregar opción'),
+        ])->columns(2);
+    }
+
+    public function table(Tables\Table $table): Tables\Table
+    {
+        return $table
+            ->columns([
+                TextColumn::make('enunciado')->wrap()->searchable(),
+                TextColumn::make('tipo')->badge(),
+                IconColumn::make('opciones_count')
+                    ->label('# Opciones')
+                    ->state(fn (Model $r) => $r->opciones()->count()),
+            ])
+            ->headerActions([
+                Actions\CreateAction::make()->label('Nueva pregunta'),
+            ])
+            ->actions([
+                Actions\EditAction::make(),
+                Actions\DeleteAction::make(),
+            ]);
+    }
+
+    /* Solo admins y superadmins */
+    protected function onlyAdmins(): bool
+    {
+        $u = auth()->user();
+        return $u->hasRole('superadmin') || $u->hasRole('admin');
+    }
+    public function canView(Model $record): bool   { return $this->onlyAdmins(); }
+    public function canViewAny(): bool            { return $this->onlyAdmins(); }
+    public function canCreate(): bool             { return $this->onlyAdmins(); }
+    public function canEdit(Model $r): bool       { return $this->onlyAdmins(); }
+    public function canDelete(Model $r): bool     { return $this->onlyAdmins(); }
+    
+}

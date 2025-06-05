@@ -1,0 +1,113 @@
+<?php
+
+namespace App\Filament\Pages;
+
+use App\Models\Capacitacion;
+use App\Models\Sesion;
+use Filament\Facades\Filament;
+use Filament\Pages\Page;
+
+class Curso extends Page
+{
+    protected static ?string $navigationLabel = null;
+    protected static ?string $navigationIcon  = null;
+    protected static ?string $slug = 'curso/{record}';
+    protected static string  $view            = 'filament.pages.curso';
+
+    public Capacitacion $curso;
+    public ?Sesion       $currentSession = null;
+    public array         $answers        = [];
+    public ?int          $score          = null;
+
+    public function mount(Capacitacion $curso): void
+    {
+        abort_unless(auth()->user()->can('view', $curso), 403);
+        $this->curso = $curso;
+    }
+
+    public function getProgresoProperty(): int
+    {
+        $total     = $this->curso->sesiones()->count();
+        $aprobadas = $this->curso->sesiones()
+            ->whereHas('usuarios', fn ($q) =>
+                $q->where('user_id', auth()->id())
+                  ->where('aprobado', true)
+            )->count();
+
+        return $total ? intval(($aprobadas / $total) * 100) : 0;
+    }
+
+    public function viewSession(int $sesionId): void
+    {
+        $this->currentSession = Sesion::findOrFail($sesionId);
+        $this->score = optional(
+            $this->currentSession
+                 ->usuarios
+                 ->firstWhere('id', auth()->id())
+        )->pivot->score;
+
+        // Inicializa el array de respuestas
+        $this->answers = [];
+        foreach ($this->currentSession->preguntas ?? [] as $i => $_) {
+            $this->answers[$i] = null;
+        }
+    }
+
+    public function terminateSession(): void
+    {
+        $this->currentSession->usuarios()->syncWithoutDetaching([
+            auth()->id() => [
+                'aprobado'      => true,
+                'completado_at' => now(),
+                'score'         => null,
+                'respuesta_json'=> null,
+            ],
+        ]);
+
+        Filament::notify('success', 'Sesión marcada como completada.');
+        $this->currentSession = null;
+    }
+
+    public function submitAnswers(): void
+    {
+        $pregs      = $this->currentSession->preguntas;
+        $correctas  = 0;
+        $totalEval  = 0;
+
+        foreach ($pregs as $i => $p) {
+            if ($p['tipo'] === 'abierta') {
+                continue;
+            }
+            $totalEval++;
+            $resp = $this->answers[$i] ?? null;
+
+            if ($p['tipo'] === 'vf') {
+                if ((bool)$resp === (bool)$p['correcto']) {
+                    $correctas++;
+                }
+            } elseif ($p['tipo'] === 'unica') {
+                $idxCorrecta = collect($p['opciones'])
+                    ->search(fn($o) => $o['correcta']);
+                if ((int)$resp === $idxCorrecta) {
+                    $correctas++;
+                }
+            }
+        }
+
+        $nota = $totalEval
+            ? round(($correctas / $totalEval) * 100)
+            : 0;
+
+        $this->currentSession->usuarios()->syncWithoutDetaching([
+            auth()->id() => [
+                'aprobado'      => $nota >= 80,
+                'score'         => $nota,
+                'respuesta_json'=> json_encode($this->answers),
+                'completado_at' => now(),
+            ],
+        ]);
+
+        $this->score = $nota;
+        Filament::notify('success', "Obtuviste {$nota}% en esta sesión.");
+    }
+}

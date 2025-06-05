@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* resources/css/variables.css */
+:root {
+  /* Fondo principal, textos importantes */
+  --color-azul-oscuro:    #11456D;
+  /* Fondo principal, textos importantes */
+  --color-azul-oscurotwo:   #175880;
+  /* Gráficos, botones secundarios */
+  --color-azul-medio:     #4DB2E1;
+  /* Botones principales, alertas */
+  --color-amarillo:       #F5D443;
+  /* Fondo general del sistema */
+  --color-azul-claro-bg:  #DDF3FF;
+  /* Fondos, tarjetas, contrastes */
+  --color-blanco:         #FFFFFF;
+  /* Textos secundarios */
+  --color-gris-texto:     #3D3D3D;
+}
+
+
+

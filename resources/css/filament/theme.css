@@ -1,0 +1,37 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Personalización global */
+:root {
+    --primary: #11456D; /* azul oscuro */
+    --secondary: #4DB2E1; /* azul medio */
+    --accent: #F5D443; /* amarillo */
+    --third: #175880;
+    --bg-light: #DDF3FF;
+    --text-dark: #1D1D1D;
+}
+
+.filament-sidebar {
+    @apply bg-[var(--primary)] ;
+}
+
+.filament-header {
+    @apply bg-[var(--primary)] ;
+}
+
+.filament-main {
+    @apply bg-[var(--bg-light)];
+}
+
+
+
+.filament-button.primary {
+    @apply bg-[var(--accent)] text-[var(--primary)];
+}
+
+
+
+body {
+    font-family: 'Inter', sans-serif;
+}
