@@ -16,18 +16,16 @@ use Filament\Tables\Actions\{EditAction, DeleteAction, DeleteBulkAction};
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Filament\Forms\Components\Hidden;
-
+use Filament\Forms\Components\{FileUpload, Textarea};
 class SedeResource extends Resource
 {
-    public static function getNavigationGroup(): ?string
-    {
-        return 'Mi Empresa';
-    }
+    
+    protected static ?string $navigationGroup = 'Gestión Empresarial';
 
     protected static ?string $navigationIcon = 'heroicon-o-globe-americas';
     protected static ?string $model = Sede::class;
-    
-     // Autorización
+
+    // Autorización
     public static function canViewAny(): bool
     {
         return auth()->user()->hasAnyRole(['superadmin', 'admin']);
@@ -46,28 +44,21 @@ class SedeResource extends Resource
         }
         return $user->hasRole('admin') && $record->empresa_id === $user->empresa_id;
     }
-
+    
     public static function canDelete(Model $record): bool
     {
         return static::canEdit($record);
     }
-    
+
 
     public static function form(Form $form): Form
     {
         return $form
             ->schema([
                 Hidden::make('empresa_id')
-                        ->default(fn () => auth()->user()->empresa_id)
-                        ->dehydrated()      // asegúrate de que se envíe en el payload
-                        ->required(),
-                // Empresa solo para superadmin
-                Select::make('empresa_id')
-                    ->label('Empresa')
-                    ->options(Empresa::pluck('nombre', 'id'))
-                    ->searchable()
-                    ->required()
-                    ->visible(fn() => auth()->user()->hasRole('superadmin')),
+                    ->default(fn() => auth()->user()->empresa_id)
+                    ->dehydrated()
+                    ->required(),
 
                 TextInput::make('codigo')
                     ->label('Código de sede')
@@ -76,6 +67,44 @@ class SedeResource extends Resource
                 TextInput::make('nombre')
                     ->label('Nombre de la sede')
                     ->required(),
+
+                // NUEVOS CAMPOS
+                TextInput::make('nit')
+                    ->label('NIT')
+                    ->maxLength(20)
+                    ->unique(ignoreRecord: true),
+
+                TextInput::make('actividad_economica')
+                    ->label('Actividad económica')
+                    ->maxLength(255),
+
+                TextInput::make('telefono')
+                    ->label('Teléfono')
+                    ->tel()
+                    ->maxLength(20),
+
+                TextInput::make('direccion')
+                    ->label('Dirección')
+                    ->maxLength(255),
+
+                TextInput::make('persona_contacto')
+                    ->label('Persona de contacto')
+                    ->maxLength(255),
+
+                FileUpload::make('foto')
+                    ->label('Foto')
+                    ->image()
+                    ->disk('public')              // asegúrate de tener storage:link
+                    ->directory('sedes')
+                    ->visibility('public')
+                    ->imageResizeMode('cover')
+                    ->imageCropAspectRatio('1:1'),
+
+                Textarea::make('google_maps_embed')
+                    ->label('Google Maps (iframe)')
+                    ->rows(4)
+                    ->maxLength(2048)
+                    ->helperText('Pega aquí el código `<iframe ...>` que genera Google Maps.'),
 
                 Toggle::make('activo')
                     ->label('Activo')
@@ -96,6 +125,9 @@ class SedeResource extends Resource
                     ->visible(fn() => auth()->user()->hasRole('superadmin')),
                 IconColumn::make('activo')->boolean(),
             ])
+            ->recordUrl(fn (\App\Models\Sede $record) =>
+                SedeResource::getUrl('view', ['record' => $record])
+            )
             ->filters([
                 SelectFilter::make('empresa_id')
                     ->label('Empresa')
@@ -114,7 +146,7 @@ class SedeResource extends Resource
     public static function getEloquentQuery(): Builder
     {
         $query = parent::getEloquentQuery();
-        if (! auth()->user()->hasRole('superadmin')) {
+        if (!auth()->user()->hasRole('superadmin')) {
             $query->where('empresa_id', auth()->user()->empresa_id);
         }
         return $query;
@@ -123,7 +155,7 @@ class SedeResource extends Resource
     // Asegurar asignación de empresa para admins
     public static function mutateFormDataBeforeCreate(array $data): array
     {
-        if (! auth()->user()->hasRole('superadmin')) {
+        if (!auth()->user()->hasRole('superadmin')) {
             $data['empresa_id'] = auth()->user()->empresa_id;
         }
         return $data;
@@ -131,7 +163,7 @@ class SedeResource extends Resource
 
     public static function mutateFormDataBeforeSave(array $data): array
     {
-        if (! auth()->user()->hasRole('superadmin')) {
+        if (!auth()->user()->hasRole('superadmin')) {
             $data['empresa_id'] = auth()->user()->empresa_id;
         }
         return $data;
@@ -140,9 +172,10 @@ class SedeResource extends Resource
     public static function getPages(): array
     {
         return [
-            'index'  => Pages\ListSedes::route('/'),
+            'index' => Pages\ListSedes::route('/'),
             'create' => Pages\CreateSede::route('/create'),
-            'edit'   => Pages\EditSede::route('/{record}/edit'),
+            'edit' => Pages\EditSede::route('/{record}/edit'),
+            'view'   => Pages\ShowSede::route('/{record}')   // ← nuevo
         ];
     }
 }

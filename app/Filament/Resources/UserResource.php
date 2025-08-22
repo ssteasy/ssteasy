@@ -9,6 +9,7 @@ use App\Models\Empresa;
 use App\Models\Modalidad;
 use App\Models\Sede;
 use Maatwebsite\Excel\Facades\Excel;
+use Filament\Tables\Filters\Filter;
 use App\Exports\UsersExport;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -16,7 +17,7 @@ use Filament\Forms\Components\{TextInput, Select, DatePicker, Tabs, Toggle};
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\View;
-
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -35,11 +36,10 @@ use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class UserResource extends Resource
 {
-    public static function getNavigationGroup(): ?string
-    {
-        return 'Mi Empresa';
-    }
+
     protected static ?string $model = User::class;
+    
+    protected static ?string $navigationGroup = 'Gestión Empresarial';
 
     protected static ?string $navigationIcon = 'heroicon-o-users';
 
@@ -68,7 +68,7 @@ class UserResource extends Resource
                         ->required(),
                     TextInput::make('segundo_apellido')
                         ->label('Segundo Apellido'),
-                        
+
                     Select::make('tipo_documento')
                         ->options([
                             'Cédula de ciudadanía' => 'Cédula de ciudadanía',
@@ -77,37 +77,32 @@ class UserResource extends Resource
                         ])->required(),
                     TextInput::make('numero_documento')
                         ->label('Número de documento')
-                        ->numeric()             
-                        ->rules(['numeric'])     
+                        ->numeric()
+                        ->rules(['numeric'])
                         ->required(),
 
                     Select::make('sexo')
                         ->label('Sexo')
                         ->options([
                             'Masculino' => 'Masculino',
-                            'Femenino'  => 'Femenino',
-                            'Otro'      => 'Otro',
+                            'Femenino' => 'Femenino',
+                            'Otro' => 'Otro',
                         ])
                         ->required(),
                 ]),
                 Tabs\Tab::make('Acceso')->schema([
-                    Hidden::make('empresa_id')
-                        ->default(fn () => auth()->user()->empresa_id)
-                        ->dehydrated()      // asegúrate de que se envíe en el payload
-                        ->required(),
-        
-                    // 2) Select sólo para superadmin
                     Select::make('empresa_id')
                         ->label('Empresa')
-                        ->options(fn () => Empresa::pluck('nombre', 'id'))
-                        ->searchable()
-                        ->visible(fn () => auth()->user()->hasRole('superadmin'))
+                        ->options(fn() => Empresa::pluck('nombre', 'id'))
+                        ->default(fn() => auth()->user()->empresa_id)   // valor por defecto para admins
+                        ->disabled(fn() => !auth()->user()->hasRole('superadmin')) // admins no lo editan
+                        ->dehydrated()          // se envía aunque esté disabled
                         ->required(),
 
-                    
-                    
-                    
-                    
+
+
+
+
                     // Mostrar solo para superadmin
                     /*Select::make('empresa_id')
                         ->label('Empresa')
@@ -124,13 +119,13 @@ class UserResource extends Resource
                         ->email()
                         ->unique(ignoreRecord: true)
                         ->required(),
-                
+
                     TextInput::make('password')
                         ->password()
                         ->dehydrateStateUsing(fn($state) => filled($state) ? bcrypt($state) : null)
                         ->dehydrated(fn($state) => filled($state))
                         ->required(fn(string $context) => $context === 'create'),
-                
+
                     Select::make('roles')
                         ->label('Rol')
                         ->relationship('roles', 'name')
@@ -141,31 +136,31 @@ class UserResource extends Resource
                             if ($user->hasRole('superadmin')) {
                                 return \Spatie\Permission\Models\Role::pluck('name', 'id');
                             }
-                    
+
                             // admins solo pueden asignar roles dentro de su empresa
                             return \Spatie\Permission\Models\Role::whereIn('name', ['admin', 'colaborador'])->pluck('name', 'id');
                         }),
-                    ]),
+                ]),
                 Tabs\Tab::make('Contacto')->schema([
                     TextInput::make('telefono')
                         ->label('Teléfono')
                         ->required(),
                     TextInput::make('direccion')
                         ->label('Dirección')
-                        ->required(),  
-                     Select::make('pais_dane')
+                        ->required(),
+                    Select::make('pais_dane')
                         ->label('País')
                         ->options(\App\Models\Pais::all()->pluck('nombre', 'codigo'))
                         ->reactive()
                         ->required(),
-                
+
                     Select::make('departamento_dane')
                         ->label('Departamento')
                         // filtrar opciones según país seleccionado
                         ->options(fn(callable $get) => \App\Models\Departamento::where('pais_codigo', $get('pais_dane'))->pluck('nombre', 'codigo'))
                         ->reactive()
                         ->required(),
-                
+
                     Select::make('municipio_dane')
                         ->label('Municipio')
                         // filtrar según departamento seleccionado
@@ -175,7 +170,7 @@ class UserResource extends Resource
                         ->label('Zona')
                         ->options([
                             'Rural' => 'Rural',
-                            'Urbana'=> 'Urbana',
+                            'Urbana' => 'Urbana',
                         ])
                         ->required(),
                 ]),
@@ -183,7 +178,8 @@ class UserResource extends Resource
                     Select::make('cargo_id')
                         ->label('Cargo')
                         ->reactive()
-                        ->options(fn (callable $get) => 
+                        ->options(
+                            fn(callable $get) =>
                             \App\Models\Cargo::query()
                                 ->where('empresa_id', $get('empresa_id') ?? auth()->user()->empresa_id)
                                 ->where('activo', true)
@@ -196,23 +192,23 @@ class UserResource extends Resource
 
                     Select::make('tipo_contrato')
                         ->options([
-                            'Fijo'        => 'Fijo',
-                            'Indefinido'  => 'Indefinido',
+                            'Fijo' => 'Fijo',
+                            'Indefinido' => 'Indefinido',
                             'Aprendizaje' => 'Aprendizaje',
-                            'Pensionado'  => 'Pensionado',
-                            'Obra labor'  => 'Obra labor',
-                            'Temporal'    => 'Temporal',
+                            'Pensionado' => 'Pensionado',
+                            'Obra labor' => 'Obra labor',
+                            'Temporal' => 'Temporal',
                         ])
-                        ->required(),     
+                        ->required(),
                     DatePicker::make('fecha_inicio'),
                     DatePicker::make('fecha_fin'),
-                    
+
                     Select::make('modalidad')
                         ->label('Modalidad de contrato')
                         ->options([
-                            'Presencial'      => 'Presencial',
-                            'Hibrido'     => 'Hibrido',
-                            'Trabajo Remoto'  => 'Trabajo Remoto',
+                            'Presencial' => 'Presencial',
+                            'Hibrido' => 'Hibrido',
+                            'Trabajo Remoto' => 'Trabajo Remoto',
                         ])
                         ->default('Presencial')
                         ->required(),
@@ -222,14 +218,15 @@ class UserResource extends Resource
                         'Riesgo III' => 'Riesgo III',
                         'Riesgo IV' => 'Riesgo IV',
                         'Riesgo V' => 'Riesgo V',
-                        
+
                     ])
-                    ->required(),
-                    
+                        ->required(),
+
                     Select::make('sede_id')
                         ->label('Sede')
                         ->reactive()                                  // <— idem
-                        ->options(fn (callable $get) => 
+                        ->options(
+                            fn(callable $get) =>
                             \App\Models\Sede::query()
                                 ->where('empresa_id', $get('empresa_id') ?? auth()->user()->empresa_id)
                                 ->where('activo', true)
@@ -238,15 +235,16 @@ class UserResource extends Resource
                         ->searchable()
                         ->nullable()
                         // si no eres superadmin, por defecto tu propia sede
-                        ->default(fn () => auth()->user()->hasRole('superadmin') 
-                            ? null 
+                        ->default(
+                            fn() => auth()->user()->hasRole('superadmin')
+                            ? null
                             : auth()->user()->sede_id
                         )
                         ->nullable(),
-                        ]),
-                
-                
-                
+                ]),
+
+
+
                 Tabs\Tab::make('Cuentas')->schema([
                     TextInput::make('eps')
                         ->label('EPS')
@@ -262,7 +260,8 @@ class UserResource extends Resource
                         ->required(),
                 ]),
             ]),
-        ])->columns(1);;
+        ])->columns(1);
+        ;
     }
 
     public static function table(Table $table): Table
@@ -283,7 +282,7 @@ class UserResource extends Resource
                     ->label('Avatar')
                     ->circular()
                     ->size(40),
-    
+
                 TextColumn::make('primer_nombre')
                     ->label('Primer Nombre')
                     ->sortable()
@@ -292,18 +291,18 @@ class UserResource extends Resource
                     ->label('Primer Apellido')
                     ->sortable()
                     ->searchable(),
-    
+
                 // Cédula (número de documento)
                 TextColumn::make('numero_documento')
                     ->label('Cédula')
                     ->sortable()
                     ->searchable(),
-    
+
                 // Teléfono (u otro campo "importante")
                 TextColumn::make('telefono')
                     ->label('Teléfono')
                     ->toggleable(),  // permite ocultar/mostrar
-    
+
                 // Para Superadmins: columna Empresa
                 TextColumn::make('empresa.nombre')
                     ->label('Empresa')
@@ -312,16 +311,66 @@ class UserResource extends Resource
                     ->visible(fn() => auth()->user()->hasRole('superadmin')),
             ])
             ->filters([
-                // Filtro de empresa para superadmins
-                Tables\Filters\SelectFilter::make('empresa_id')
+
+                /** Filtros que ya tenías ------------------------- */
+                SelectFilter::make('empresa_id')
                     ->label('Empresa')
-                    ->options(\App\Models\Empresa::pluck('nombre', 'id'))
+                    ->options(\App\Models\Empresa::pluck('nombre','id'))
                     ->visible(fn() => auth()->user()->hasRole('superadmin')),
-    
-                // Filtro por rol
-                Tables\Filters\SelectFilter::make('roles.name')
+            
+                SelectFilter::make('roles.name')
                     ->label('Rol')
-                    ->relationship('roles', 'name'),
+                    ->relationship('roles','name'),
+            
+                /** Nuevos filtros -------------------------------- */
+                SelectFilter::make('sede_id')
+                    ->label('Sede')
+                    ->relationship(
+                        name: 'sede',
+                        titleAttribute: 'nombre',
+                        modifyQueryUsing: fn (Builder $query) =>
+                            auth()->user()->hasRole('superadmin')
+                                ? $query            // todas las sedes
+                                : $query->where('empresa_id', auth()->user()->empresa_id)
+                    ),
+            
+                SelectFilter::make('cargo_id')
+                    ->label('Cargo')
+                    ->relationship(
+                        name: 'cargo',
+                        titleAttribute: 'nombre',
+                        modifyQueryUsing: fn (Builder $query) =>
+                            auth()->user()->hasRole('superadmin')
+                                ? $query
+                                : $query->where('empresa_id', auth()->user()->empresa_id)
+                    ),
+            
+                SelectFilter::make('sexo')
+                    ->label('Sexo')
+                    ->options([
+                        'Masculino' => 'Masculino',
+                        'Femenino'  => 'Femenino',
+                        'Otro'      => 'Otro',
+                    ]),
+            
+                SelectFilter::make('tipo_contrato')
+                    ->label('Tipo de contrato')
+                    ->options([
+                        'Fijo'        => 'Fijo',
+                        'Indefinido'  => 'Indefinido',
+                        'Aprendizaje' => 'Aprendizaje',
+                        'Pensionado'  => 'Pensionado',
+                        'Obra labor'  => 'Obra labor',
+                        'Temporal'    => 'Temporal',
+                    ]),
+            
+                SelectFilter::make('modalidad')
+                    ->label('Modalidad')
+                    ->options([
+                        'Presencial'      => 'Presencial',
+                        'Hibrido'         => 'Hibrido',
+                        'Trabajo Remoto'  => 'Trabajo Remoto',
+                    ])
             ])
             ->actions([
                 ViewAction::make()           // ← aquí añades el botón Ver
@@ -348,21 +397,21 @@ class UserResource extends Resource
             'index' => Pages\ListUsers::route('/'),
             'create' => Pages\CreateUser::route('/create'),
             'edit' => Pages\EditUser::route('/{record}/edit'),
-            'view'   => Pages\ViewUser::route('/{record}/view'),
+            'view' => Pages\ViewUser::route('/{record}/view'),
         ];
     }
-    
+
     public static function getEloquentQuery(): Builder
     {
         $user = auth()->user();
-    
+
         if ($user->hasRole('superadmin')) {
             return parent::getEloquentQuery();
         }
-    
+
         return parent::getEloquentQuery()->where('empresa_id', $user->empresa_id);
     }
-    
+
     public static function afterCreate(Model $record): void
     {
         if (request()->has('roles')) {
@@ -371,12 +420,12 @@ class UserResource extends Resource
     }
     public static function mutateFormDataBeforeCreate(array $data): array
     {
-        if (! auth()->user()->hasRole('superadmin')) {
+        if (!auth()->user()->hasRole('superadmin')) {
             $data['empresa_id'] = auth()->user()->empresa_id;
         }
         return $data;
     }
 
-    
-    
+
+
 }

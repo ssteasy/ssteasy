@@ -8,7 +8,7 @@ use Filament\Forms;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Filament\Tables\Columns\{TextColumn, BadgeColumn, IconColumn};
+use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Actions\Action;
 use Illuminate\Support\Facades\Storage;
 
@@ -17,9 +17,8 @@ class CertificadoResource extends Resource
     protected static ?string $model = Certificado::class;
 
     protected static ?string $navigationLabel = 'Certificados';
-    protected static ?string $navigationIcon   = 'heroicon-o-newspaper';
-    
-    protected static ?string $navigationGroup  = 'Capacitaciones';
+    protected static ?string $navigationIcon  = 'heroicon-o-newspaper';
+    protected static ?string $navigationGroup = 'Gestión del conocimiento';
 
     public static function canViewAny(): bool
     {
@@ -28,7 +27,7 @@ class CertificadoResource extends Resource
 
     public static function form(Forms\Form $form): Forms\Form
     {
-        // No permitimos crear ni editar certificados manualmente en el panel.
+        // No permitimos crear ni editar certificados manualmente.
         return $form->schema([]);
     }
 
@@ -36,38 +35,47 @@ class CertificadoResource extends Resource
     {
         return $table
             ->columns([
-                TextColumn::make('id')->label('ID')->sortable(),
-                TextColumn::make('created_at')->label('Fecha emisión')->dateTime()->sortable(),
+                TextColumn::make('id')
+                    ->label('ID')
+                    ->sortable(),
+
+                TextColumn::make('created_at')
+                    ->label('Fecha emisión')
+                    ->dateTime('d/m/Y H:i')
+                    ->sortable(),
+
                 TextColumn::make('user')
                     ->label('Colaborador')
-                    ->getStateUsing(
-                        fn(Certificado $record) =>
-                        "{$record->user->primer_nombre} {$record->user->primer_apellido}"
+                    ->getStateUsing(fn (Certificado $r) =>
+                        "{$r->user->primer_nombre} {$r->user->primer_apellido}"
                     )
                     ->sortable()
                     ->searchable(),
-                TextColumn::make('user.numero_documento')->label('Documento'),
+
+                TextColumn::make('user.numero_documento')
+                    ->label('Documento'),
+
                 TextColumn::make('capacitacion.nombre_capacitacion')
                     ->label('Curso')
                     ->sortable()
                     ->searchable(),
-                TextColumn::make('codigo_unico')->label('Código')->copyable(),
-                //IconColumn::make('file_path')
-                    //->label('Archivo')
-                    //->boolean()
-                    //->getStateUsing(fn(Certificado $record) =>
-                    //    Storage::disk('public')->exists($record->file_path)
-                    //)
-                    //->sortable(),
-            ])
-            ->filters([
-                //
+
+                TextColumn::make('codigo_unico')
+                    ->label('Código')
+                    ->copyable(),
             ])
             ->actions([
-                
-            ])
-            ->bulkActions([
-              
+                Action::make('download')
+                    ->label('Descargar')
+                    ->icon('heroicon-o-arrow-down-tray')
+                    ->tooltip('Descargar PDF del certificado')
+                    ->url(fn (Certificado $r) =>
+                        Storage::disk('public')->url($r->file_path)
+                    )
+                    ->openUrlInNewTab()   // abre el PDF en otra pestaña (descarga/visualiza)
+                    ->visible(fn (Certificado $r) =>
+                        Storage::disk('public')->exists($r->file_path)
+                    ),
             ]);
     }
 
@@ -75,9 +83,6 @@ class CertificadoResource extends Resource
     {
         return [
             'index' => Pages\ListCertificados::route('/'),
-            // Deshabilitamos create y edit:
-            //'create' => Pages\CreateCertificado::route('/create'),
-            //'edit'   => Pages\EditCertificado::route('/{record}/edit'),
         ];
     }
 }

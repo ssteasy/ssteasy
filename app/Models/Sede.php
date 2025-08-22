@@ -14,7 +14,15 @@ class Sede extends Model
         'codigo',
         'nombre',
         'activo',
+        'nit',
+        'actividad_economica',
+        'telefono',
+        'direccion',
+        'persona_contacto',
+        'foto',
+        'google_maps_embed',
     ];
+
 
     public function empresa()
     {

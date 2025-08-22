@@ -18,6 +18,8 @@ class PermissionResource extends Resource
     protected static ?string $model = Permission::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-rectangle-stack';
+    
+    protected static ?string $navigationGroup = 'Administración General';
     public static function canViewAny(): bool
     {
         return auth()->user()->hasAnyRole(['superadmin']);

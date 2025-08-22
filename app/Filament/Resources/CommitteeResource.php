@@ -14,18 +14,21 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Filament\Tables\Actions\Action;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Illuminate\Support\Facades\Date;
 class CommitteeResource extends Resource
 {
     protected static ?string $model = Committee::class;
     protected static ?string $navigationIcon = 'heroicon-o-user-group';
 
-    protected static ?string $navigationGroup = 'Gestión de Comités';
+    protected static ?string $navigationGroup = 'Comités';
 
     public static function canViewAny(): bool
     {
-        return auth()->user()->hasAnyRole(['superadmin', 'admin']);
+        return auth()->user()->hasAnyRole(['superadmin', 'admin', 'colaborador']);
     }
+
 
     public static function shouldRegisterNavigation(): bool
     {
@@ -136,12 +139,34 @@ class CommitteeResource extends Resource
                     ->label('Inscritos')
                     ->counts('members'),
             ])
+            // 1) Panel expandible con info extra
+
             ->filters([
                 Tables\Filters\SelectFilter::make('empresa_id')
                     ->relationship('empresa', 'nombre')
                     ->visible(fn() => auth()->user()->hasRole('superadmin')),
             ])
             ->actions([
+                Tables\Actions\Action::make('detalles')
+                    ->label('Detalles')
+                    ->icon('heroicon-o-information-circle')
+                    ->color('secondary')
+                    ->modalHeading(fn(Committee $record) => "Detalles de “{$record->nombre}”")
+                    ->modalContent(fn(Committee $record) => view('filament.resources.committee.pages.details', [
+                        'record' => $record,
+                    ]))
+                    ->visible(
+                        fn(Committee $record) =>
+                        // Superadmins y admins siempre pueden ver “Detalles”
+                        auth()->user()->hasAnyRole(['superadmin', 'admin'])
+                        ||
+                            // Colaboradores solo mientras la votación no haya terminado
+                        (
+                            auth()->user()->hasRole('colaborador')
+                            && Date::now()->lessThanOrEqualTo($record->fecha_fin_votaciones->endOfDay())
+                        )
+                    ),
+                // Inscribirse
                 Tables\Actions\Action::make('inscribirse')
                     ->label('Postularme')
                     ->icon('heroicon-o-user-plus')
@@ -158,36 +183,57 @@ class CommitteeResource extends Resource
                             'tipo_representante' => 'representante_trabajador',
                             'activo' => true,
                         ]);
-
-                        Notification::make()          // ya importada arriba
+                        Notification::make()
                             ->title('¡Inscripción exitosa!')
                             ->success()
                             ->send();
                     }),
+
+                // Votar
                 Tables\Actions\Action::make('votar')
                     ->label('Votar')
                     ->icon('heroicon-o-pencil-square')
-                    ->url(fn (Committee $record) =>
+                    ->url(
+                        fn(Committee $record) =>
                         CommitteeResource::getUrl('vote', ['record' => $record])
                     )
-                    ->visible(fn (Committee $record) =>
+                    ->visible(
+                        fn(Committee $record) =>
                         auth()->user()->hasRole('colaborador')
                         && now()->between(
                             $record->fecha_inicio_votaciones->startOfDay(),
                             $record->fecha_fin_votaciones->endOfDay(),
-                            true                       // ← inclusivo
+                            true
                         )
                     ),
 
+                // Resultados (solo admin y después de la votación)
                 Tables\Actions\Action::make('resultados')
                     ->icon('heroicon-o-chart-bar')
-                    ->url(fn(Committee $record) => CommitteeResource::getUrl('results', ['record' => $record])),
-
+                    ->url(
+                        fn(Committee $record) =>
+                        CommitteeResource::getUrl('results', ['record' => $record])
+                    )
+                    ->visible(
+                        fn(Committee $record) =>
+                        auth()->user()->hasRole('admin')
+                        && now()->isAfter($record->fecha_fin_votaciones->endOfDay())
+                    ),
+                Tables\Actions\Action::make('miembros')
+                    ->label('Ver miembros')
+                    ->icon('heroicon-o-users')
+                    ->url(fn($record) => CommitteeResource::getUrl('members', ['record' => $record]))
+                    // Visible solo a colaboradores (o admins) y cuando ya haya ganadores:
+                    ->visible(
+                        fn($record) =>
+                        auth()->user()->hasRole('colaborador')
+                        && $record->members()->where('activo', true)->exists()
+                    )
+                    ->color('secondary'),
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make(),
             ]);
     }
-
     // Página de resultados
     public static function getPages(): array
     {
@@ -197,6 +243,7 @@ class CommitteeResource extends Resource
             'edit' => Pages\EditCommittee::route('/{record}/edit'),
             'results' => Pages\CommitteeResults::route('/{record}/results'), // Nueva ruta
             'vote' => Pages\CommitteeVote::route('/{record}/vote'),
+            'members' => Pages\CommitteeMembers::route('/{record}/members'),
         ];
     }
 }

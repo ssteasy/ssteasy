@@ -4,30 +4,28 @@ namespace App\Filament\Resources\CommitteeResource\Pages;
 
 use App\Filament\Resources\CommitteeResource;
 use App\Models\Vote;
-use Filament\Forms\Components\Radio;
-use Filament\Forms\Concerns\InteractsWithForms;          // ✅
-use Filament\Forms\Form;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\Concerns\InteractsWithRecord;
 use Filament\Resources\Pages\Page;
 
 class CommitteeVote extends Page
 {
-    use InteractsWithRecord, InteractsWithForms;         // ✅
+    use InteractsWithRecord;
 
+    // ↑ Ya no necesitamos InteractsWithForms, pues validamos manualmente
     protected static string $resource = CommitteeResource::class;
-    protected static string $view = 'filament.resources.committee.pages.vote';
+    protected static string $view     = 'filament.resources.committee.pages.vote';
 
-    /* Campos de formulario */
-    public ?int $choice = null;
+    public ?int $choice       = null;
+    public bool $alreadyVoted = false;
 
     public function mount(int|string $record): void
     {
         $this->record = $this->resolveRecord($record);
 
         abort_unless(
-            auth()->user()->hasRole('colaborador') &&
-            now()->between(
+            auth()->user()->hasRole('colaborador')
+            && now()->between(
                 $this->record->fecha_inicio_votaciones->startOfDay(),
                 $this->record->fecha_fin_votaciones->endOfDay(),
                 true
@@ -35,45 +33,43 @@ class CommitteeVote extends Page
             403
         );
 
-        /** Opcional, si quieres valores por defecto */
-        $this->form->fill();
-    }
+        // 1) Detectar voto existente
+        $existing = Vote::where('committee_id', $this->record->id)
+                        ->where('voter_id', auth()->id())
+                        ->first();
 
-    protected function getFormSchema(): array
-    {
-        return [
-            Radio::make('choice')
-                ->label('Elige tu representante')
-                ->options(function () {
-                    return $this->record->members()
-                        ->with('user')
-                        ->get()
-                        ->filter(fn($m) => $m->user)               // ⚠️ descarta si falta usuario
-                        ->mapWithKeys(function ($m) {               // crea etiqueta segura
-                            $user = $m->user;
-                            $name = trim("{$user->primer_nombre} {$user->primer_apellido}") ?: "Usuario {$user->id}";
-                            return [$m->id => $name];
-                        })
-                        ->toArray();
-                })
-                ->required()
-
-        ];
+        if ($existing) {
+            $this->choice       = $existing->committee_member_id;
+            $this->alreadyVoted = true;
+        }
     }
 
     public function vote(): void
     {
-        $this->form->validate();
+        // 2) Si ya votó, sólo mostramos aviso
+        if ($this->alreadyVoted) {
+            Notification::make()
+                ->title('Ya has votado')
+                ->warning()
+                ->body('Tu voto ya fue registrado y no puede modificarse.')
+                ->send();
 
-        Vote::updateOrCreate(
-            [
-                'committee_id' => $this->record->id,
-                'voter_id' => auth()->id(),
-            ],
-            [
-                'committee_member_id' => $this->choice,
-            ]
-        );
+            return;
+        }
+
+        // 3) Validaciones
+        $this->validate([
+            'choice' => ['required', 'integer'],
+        ]);
+
+        // 4) Crear el voto (sin updateOrCreate para evitar cambios)
+        Vote::create([
+            'committee_id'         => $this->record->id,
+            'committee_member_id'  => $this->choice,
+            'voter_id'             => auth()->id(),
+        ]);
+
+        $this->alreadyVoted = true;
 
         Notification::make()
             ->title('¡Voto registrado!')

@@ -44,74 +44,75 @@ class SgsstResponsableResource extends Resource
 {
     protected static ?string $model = SgsstResponsable::class;
     
+    protected static ?string $navigationGroup = 'Generalidades';
     public static function form(Form $form): Form
     {
-       return $form
-        ->schema([
-            // Si es superadmin, mostrar el selector
-            Select::make('empresa_id')
-                ->label('Empresa')
-                ->relationship('empresa', 'nombre')
-                ->visible(fn () => auth()->user()->hasRole('superadmin'))
-                ->required(),
-            
-Select::make('user_id')
-    ->label('Responsable SST')
-    ->required()
-    ->searchable()
-    ->live()
-    ->getSearchResultsUsing(function (string $search, callable $get) {
-        $empresaId = auth()->user()->hasRole('superadmin')
-            ? $get('empresa_id')
-            : auth()->user()->empresa_id;
+        return $form
+            ->schema([
+                // Si es superadmin, mostrar el selector
+                Select::make('empresa_id')
+                    ->label('Empresa')
+                    ->relationship('empresa', 'nombre')
+                    ->visible(fn() => auth()->user()->hasRole('superadmin'))
+                    ->required(),
 
-        if (!$empresaId) {
-            return [];
-        }
+                Select::make('user_id')
+                    ->label('Responsable SST')
+                    ->required()
+                    ->searchable()
+                    ->live()
+                    ->getSearchResultsUsing(function (string $search, callable $get) {
+                        $empresaId = auth()->user()->hasRole('superadmin')
+                            ? $get('empresa_id')
+                            : auth()->user()->empresa_id;
 
-        return \App\Models\User::query()
-            ->where('empresa_id', $empresaId)
-            ->where(function ($query) use ($search) {
-                $query->where('primer_nombre', 'like', "%{$search}%")
-                      ->orWhere('numero_documento', 'like', "%{$search}%");
-            })
-            ->limit(20)
-            ->get()
-            ->mapWithKeys(function ($user) {
-                return [$user->id => "{$user->primer_nombre} - {$user->numero_documento}"];
-            })
-            ->toArray();
-    })
-    ->getOptionLabelUsing(function ($value): ?string {
-        $user = \App\Models\User::find($value);
-        return $user ? "{$user->primer_nombre} - {$user->numero_documento}" : null;
-    })
-,
+                        if (!$empresaId) {
+                            return [];
+                        }
 
-            DatePicker::make('fecha_inicio')->label('Fecha inicio')->required(),
-            DatePicker::make('fecha_fin')   ->label('Fecha fin')->nullable(),
+                        return \App\Models\User::query()
+                            ->where('empresa_id', $empresaId)
+                            ->where(function ($query) use ($search) {
+                                $query->where('primer_nombre', 'like', "%{$search}%")
+                                    ->orWhere('numero_documento', 'like', "%{$search}%");
+                            })
+                            ->limit(20)
+                            ->get()
+                            ->mapWithKeys(function ($user) {
+                                return [$user->id => "{$user->primer_nombre} - {$user->numero_documento}"];
+                            })
+                            ->toArray();
+                    })
+                    ->getOptionLabelUsing(function ($value): ?string {
+                        $user = \App\Models\User::find($value);
+                        return $user ? "{$user->primer_nombre} - {$user->numero_documento}" : null;
+                    })
+                ,
 
-            Toggle::make('activo')
-                ->label('Activo')
-                ->default(true),
+                DatePicker::make('fecha_inicio')->label('Fecha inicio')->required(),
+                DatePicker::make('fecha_fin')->label('Fecha fin')->nullable(),
 
-            TextArea::make('funciones')
-                ->label('Funciones')
-                ->required(),
+                Toggle::make('activo')
+                    ->label('Activo')
+                    ->default(true),
 
-            Repeater::make('documentos')
-                ->label('Documentos')
-                ->schema([
-                    TextInput::make('titulo')->label('Título')->required(),
-                    FileUpload::make('file')
-                        ->label('Archivo')
-                        ->disk('public')
-                        ->directory('sgsst-responsables')
-                        ->required(),
-                ])
-                ->createItemButtonLabel('Agregar documento')
-                ->columnSpanFull(),
-        ]);
+                TextArea::make('funciones')
+                    ->label('Funciones')
+                    ->required(),
+
+                Repeater::make('documentos')
+                    ->label('Documentos')
+                    ->schema([
+                        TextInput::make('titulo')->label('Título')->required(),
+                        FileUpload::make('file')
+                            ->label('Archivo')
+                            ->disk('public')
+                            ->directory('sgsst-responsables')
+                            ->required(),
+                    ])
+                    ->createItemButtonLabel('Agregar documento')
+                    ->columnSpanFull(),
+            ]);
     }
 
     public static function table(Table $table): Table
@@ -125,7 +126,8 @@ Select::make('user_id')
 
                 TextColumn::make('user')
                     ->label('Responsable')
-                    ->formatStateUsing(fn ($state, $record) =>
+                    ->formatStateUsing(
+                        fn($state, $record) =>
                         "{$record->user->primer_nombre} {$record->user->segundo_nombre} {$record->user->primer_apellido} {$record->user->segundo_apellido}"
                     )
                     ->sortable()
@@ -153,23 +155,23 @@ Select::make('user_id')
 
                 TextColumn::make('documentos')
                     ->label('Docs')
-                    ->formatStateUsing(fn ($state, $record) => count($record->documentos ?? []) . ' archivo(s)'),
+                    ->formatStateUsing(fn($state, $record) => count($record->documentos ?? []) . ' archivo(s)'),
             ])
             ->filters([
                 SelectFilter::make('empresa_id')
                     ->label('Empresa')
                     ->relationship('empresa', 'nombre')
-                    ->visible(fn () => auth()->user()->hasRole('superadmin')),
+                    ->visible(fn() => auth()->user()->hasRole('superadmin')),
             ])
             ->actions([
                 EditAction::make()
-                    ->visible(fn () => auth()->user()->hasAnyRole(['admin', 'superadmin'])),
+                    ->visible(fn() => auth()->user()->hasAnyRole(['admin', 'superadmin'])),
                 DeleteAction::make()
-                    ->visible(fn () => auth()->user()->hasRole('superadmin')),
+                    ->visible(fn() => auth()->user()->hasRole('superadmin')),
             ]);
 
     }
-    
+
     public static function mutateFormDataBeforeCreate(array $data): array
     {
         if (auth()->user()->hasRole('admin')) {
@@ -184,7 +186,9 @@ Select::make('user_id')
         $query = parent::getEloquentQuery();
         // Sólo admins de empresa y superadmins
         if (!auth()->user()->hasRole('superadmin')) {
-            $query->whereHas('user', fn($q) => 
+            $query->whereHas(
+                'user',
+                fn($q) =>
                 $q->where('empresa_id', auth()->user()->empresa_id)
             );
         }
@@ -196,7 +200,7 @@ Select::make('user_id')
             \App\Filament\Resources\SgsstResponsableResource\Widgets\ResponsableSstInfo::class,
         ];
     }
-    
+
     public static function index(): string
     {
         return static::getPages()['index'];
@@ -212,8 +216,8 @@ Select::make('user_id')
     {
         return [
             'index' => Pages\ListSgsstResponsables::route('/'),
-            'create'=> Pages\CreateSgsstResponsable::route('/create'),
-            'edit'  => Pages\EditSgsstResponsable::route('/{record}/edit'),
+            'create' => Pages\CreateSgsstResponsable::route('/create'),
+            'edit' => Pages\EditSgsstResponsable::route('/{record}/edit'),
         ];
     }
 }

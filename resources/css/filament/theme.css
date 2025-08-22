@@ -35,3 +35,8 @@
 body {
     font-family: 'Inter', sans-serif;
 }
+
+
+[data-page="filament.resources.epps.edit"] .filament-page-content {
+    max-width: 100% !important;
+  }

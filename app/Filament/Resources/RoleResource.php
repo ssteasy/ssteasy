@@ -15,6 +15,8 @@ use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class RoleResource extends Resource
 {   
+    protected static ?string $navigationGroup = 'Administración Interna';
+
     public static function canViewAny(): bool
     {
         return auth()->user()->hasAnyRole(['superadmin']);

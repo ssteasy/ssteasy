@@ -31,4 +31,5 @@ class Empresa extends Model
     {
         return $this->hasMany(User::class, 'empresa_id');
     }
+    
 }

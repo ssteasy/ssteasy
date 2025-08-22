@@ -21,12 +21,14 @@ class Capacitacion extends Model
         'fecha_fin',
         'activa',
         'tipo_asignacion',          // ← manual | abierta | obligatoria
+        'categoria' 
     ];
 
     protected $casts = [
         'activa' => 'boolean',
         'fecha_inicio' => 'date',   // acepta null
         'fecha_fin' => 'date',   // acepta null
+
     ];
 
     /* ---------- Relaciones -------------- */
@@ -72,5 +74,9 @@ class Capacitacion extends Model
     public function certificados(): HasMany
     {
         return $this->hasMany(Certificado::class);
+    }
+    public function getCategoriasListAttribute()
+    {
+        return collect($this->categorias ?? []);
     }
 }

@@ -3,21 +3,12 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\SgsstFileResource\Pages;
-use App\Models\{Empresa, SgsstFile, User};
+use App\Models\{Empresa, SgsstFile, User, Cargo, Sede};
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Database\Eloquent\Model;
-
-use Filament\Notifications\Notification;
-
+use Illuminate\Support\Facades\Storage;
 use Filament\Facades\Filament;
-use Filament\Resources\Resource;
-
-//  Form & Table aliases
 use Filament\Forms\Form as FilamentForm;
-use Filament\Tables\Table as FilamentTable;
-
-// ── Form components ─────────────────────────────────────────────
 use Filament\Forms\Components\{
     TextInput,
     Textarea,
@@ -25,22 +16,18 @@ use Filament\Forms\Components\{
     FileUpload,
     Select,
     Hidden,
-    Toggle
+    Toggle,
+    Fieldset
 };
-
-// ── Table columns ───────────────────────────────────────────────
+use Filament\Forms\Get;
+use Filament\Notifications\Notification;
+use Filament\Resources\Resource;
+use Filament\Tables\Table as FilamentTable;
 use Filament\Tables\Columns\{
     TextColumn,
     IconColumn,
     BadgeColumn
 };
-use Filament\Tables\Filters\SelectFilter;
-use Filament\Tables\Filters\TernaryFilter;
-use Filament\Tables\Filters\BooleanFilter;
-use Filament\Tables\Filters\Filter;
-
-
-// ── Table actions ───────────────────────────────────────────────
 use Filament\Tables\Actions\{
     Action,
     ViewAction,
@@ -48,27 +35,31 @@ use Filament\Tables\Actions\{
     DeleteAction,
     DeleteBulkAction
 };
+use Filament\Tables\Filters\SelectFilter;
 use Carbon\Carbon;
-
-
-
+use Closure;
 
 class SgsstFileResource extends Resource
 {
+    /* ─────────────────────────────── Básicos ─────────────────────────────── */
+
     protected static ?string $model = SgsstFile::class;
     protected static ?string $navigationIcon = 'heroicon-o-document';
+
+    protected static ?string $navigationGroup = 'Documentación de procesos';
     protected static ?string $navigationLabel = 'Gestión de Archivos';
+
+    /* ─────────────────────── Scope según rol del usuario ─────────────────── */
+
     public static function getEloquentQuery(): Builder
     {
         $query = parent::getEloquentQuery();
         $user = Filament::auth()->user();
 
-        // ── Admin → archivos de SU empresa
         if ($user->hasRole('admin')) {
             return $query->where('empresa_id', $user->empresa_id);
         }
 
-        // ── Colaborador → sólo los que debe firmar
         if ($user->hasRole('colaborador')) {
             return $query->whereHas(
                 'assignedUsers',
@@ -77,15 +68,32 @@ class SgsstFileResource extends Resource
             );
         }
 
-        // ── Super-admin → sin restricción
-        return $query;
+        return $query; // superadmin
     }
 
+    /* ───────────────────── Helper: IDs de asignación masiva ──────────────── */
 
-    // ────────────────────────── FORM ──────────────────────────
+    protected static function refreshAssignees(Get $get): array   // ⬅️ cambia Closure ↦ Get
+    {
+        $query = User::query()
+            ->whereHas('roles', fn($q) => $q->where('name', 'colaborador'));
+
+        $empresaId = $get('empresa_id') ?? Filament::auth()->user()->empresa_id;
+        $query->where('empresa_id', $empresaId);
+
+        $query->when($get('filter_cargo_id'), fn($q, $id) => $q->where('cargo_id', $id));
+        $query->when($get('filter_sede_id'), fn($q, $id) => $q->where('sede_id', $id));
+        $query->when($get('filter_sexo'), fn($q, $sexo) => $q->where('sexo', $sexo));
+
+        return $query->pluck('id')->all();
+    }
+
+    /* ──────────────────────────────── FORM ───────────────────────────────── */
+
     public static function form(FilamentForm $form): FilamentForm
     {
         return $form->schema([
+            /* ── Empresa (visible sólo para superadmin) ─────────────────── */
             Select::make('empresa_id')
                 ->label('Empresa')
                 ->options(Empresa::pluck('nombre', 'id'))
@@ -97,59 +105,108 @@ class SgsstFileResource extends Resource
                 ->default(fn() => auth()->user()->empresa_id)
                 ->visible(fn() => !auth()->user()->hasRole('superadmin')),
 
+            /* ── Quien sube ─────────────────────────────────────────────── */
+            Hidden::make('uploaded_by')->default(fn() => Filament::auth()->id()),
 
-
-
-            // Quien sube
-            Hidden::make('uploaded_by')
-                ->default(fn() => Filament::auth()->id()),
-
+            /* ── Datos básicos del archivo ──────────────────────────────── */
             TextInput::make('title')->label('Título')->required(),
-
-
-            FileUpload::make('file_path')
-                ->label('Archivo')
-                ->disk('public')
-                ->directory('sgsst-files')
-                ->required(),
-            Select::make('assignedUsers')
-                ->label('Asignar colaboradores')
-                ->multiple()
-                ->relationship(
-                    'assignedUsers',
-                    'primer_nombre',
-                    function (Builder $query) {
-                        $user = Filament::auth()->user();
-
-                        // Si hay usuario y NO es superadmin, filtra por su empresa
-                        if ($user && !$user->hasRole('superadmin')) {
-                            $query->where('empresa_id', $user->empresa_id);
-                        }
-
-                        // Solo colaboradores
-                        $query->whereHas('roles', fn($q) => $q->where('name', 'colaborador'));
-                    }
-                )
-                ->preload()
-                ->required(),
             Textarea::make('description')->label('Descripción')->rows(3),
-            Toggle::make('require_signature')
-                ->label('Requiere firma de colaboradores')
-                ->inline(false)
-                ->default(false)
-                ->live(),
-
-
 
             DatePicker::make('signature_deadline')
                 ->label('Fecha límite de firma')
                 ->visible(fn($get) => $get('require_signature'))
                 ->nullable()
                 ->reactive(),
+
+
+
+            Toggle::make('require_signature')
+                ->label('Requiere firma de colaboradores')
+                ->inline(false)
+                ->default(false)
+                ->live(),
+
+            FileUpload::make('file_path')
+                ->label('Archivo')
+                ->disk('public')
+                ->directory('sgsst-files')
+                ->required(),
+
+            /* ────────────────── Filtros de asignación masiva ───────────── */
+
+
+            /* ── Asignar colaboradores (relleno automático) ─────────────── */
+            Select::make('assignedUsers')
+                ->columns(2)
+                ->label('Asignar colaboradores')
+                ->multiple()
+                ->relationship('assignedUsers', 'primer_nombre', function (Builder $query) {
+                    $user = Filament::auth()->user();
+
+                    if ($user && !$user->hasRole('superadmin')) {
+                        $query->where('empresa_id', $user->empresa_id);
+                    }
+
+                    $query->whereHas('roles', fn($q) => $q->where('name', 'colaborador'));
+                })
+                ->preload()
+                ->required(),
+            Fieldset::make('Filtros avanzados de Asignación a colaboradores')
+                ->columns(3)
+                ->dehydrated(false) // no persiste en DB
+                ->schema([
+                    // Cargo
+                    Select::make('filter_cargo_id')
+                        ->label('Cargo')
+                        ->options(
+                            Cargo::query()
+                                ->where('empresa_id', auth()->user()->empresa_id)
+                                ->pluck('nombre', 'id')
+                        )
+                        ->searchable()
+                        ->reactive()
+                        ->afterStateUpdated(
+                            fn($set, $get) =>
+                            $set('assignedUsers', self::refreshAssignees($get))
+                        )
+                        ->dehydrated(false),
+
+                    // Sede
+                    Select::make('filter_sede_id')
+                        ->label('Sede')
+                        ->options(
+                            Sede::query()
+                                ->where('empresa_id', auth()->user()->empresa_id)
+                                ->pluck('nombre', 'id')
+                        )
+                        ->searchable()
+                        ->reactive()
+                        ->afterStateUpdated(
+                            fn($set, $get) =>
+                            $set('assignedUsers', self::refreshAssignees($get))
+                        )
+                        ->dehydrated(false),
+
+                    // Sexo
+                    Select::make('filter_sexo')
+                        ->label('Sexo')
+                        ->options([
+                            'Masculino' => 'Masculino',
+                            'Femenino' => 'Femenino',
+                            'Otro' => 'Otro',
+                        ])
+                        ->reactive()
+                        ->afterStateUpdated(
+                            fn($set, $get) =>
+                            $set('assignedUsers', self::refreshAssignees($get))
+                        )
+                        ->dehydrated(false),
+                ]),
         ]);
     }
 
-    // ────────────────────────── TABLE ──────────────────────────
+    /* ─────────────────────────────── TABLE ──────────────────────────────── */
+
     public static function table(FilamentTable $table): FilamentTable
     {
         return $table
@@ -159,17 +216,18 @@ class SgsstFileResource extends Resource
                     ->sortable()
                     ->searchable()
                     ->visible(fn() => Filament::auth()->user()->hasRole('superadmin')),
+
                 TextColumn::make('title')->sortable()->searchable(),
                 TextColumn::make('uploader.primer_nombre')->label('Subido por'),
                 TextColumn::make('created_at')->label('Fecha subida')->date(),
                 TextColumn::make('signature_deadline')->label('Límite firma')->date(),
+
                 IconColumn::make('deadline_status')
                     ->label('Plazo')
                     ->tooltip('Plazo vencido')
                     ->icon('heroicon-o-exclamation-triangle')
                     ->color('danger')
                     ->visible(function ($record) {
-                        // Si es null (fase de encabezado) => ocultar
                         if (!$record) {
                             return false;
                         }
@@ -180,7 +238,6 @@ class SgsstFileResource extends Resource
                             && $record->signatories()->whereNull('signed_at')->exists();
                     }),
 
-
                 BadgeColumn::make('signatories_count')
                     ->label('Asignados')
                     ->counts('signatories')
@@ -188,20 +245,25 @@ class SgsstFileResource extends Resource
 
                 BadgeColumn::make('signed_count')
                     ->label('Firmados')
-                    ->getStateUsing(fn($record) => $record->signatories()->whereNotNull('signed_at')->count())
+                    ->getStateUsing(
+                        fn($record) =>
+                        $record->signatories()->whereNotNull('signed_at')->count()
+                    )
                     ->color('success')
                     ->visible(fn() => Filament::auth()->user()->hasAnyRole(['admin', 'superadmin'])),
 
                 BadgeColumn::make('pending_count')
                     ->label('Pendientes')
-                    ->getStateUsing(fn($record) => $record->signatories()->whereNull('signed_at')->count())
+                    ->getStateUsing(
+                        fn($record) =>
+                        $record->signatories()->whereNull('signed_at')->count()
+                    )
                     ->color('danger')
                     ->visible(fn() => Filament::auth()->user()->hasAnyRole(['admin', 'superadmin'])),
-
-
             ])
+
             ->actions([
-                /* ========= Firma / listado ========= */
+                /* Firmas / listado */
                 Action::make('signatures')
                     ->label('Firmas')
                     ->icon('heroicon-o-users')
@@ -213,27 +275,26 @@ class SgsstFileResource extends Resource
                         ['record' => $record->load('assignedUsers', 'signatories')]
                     ))
                     ->visible(fn() => Filament::auth()->user()->hasAnyRole(['admin', 'superadmin'])),
+
+                /* Firmar */
                 Action::make('sign')
                     ->label('Firmar')
                     ->icon('heroicon-o-pencil')
                     ->visible(
                         fn($record) =>
                         Filament::auth()->user()->hasRole('colaborador')
-                            && $record->assignedUsers->contains(Filament::auth()->id())
-                            && $record->require_signature
-                            && $record->signatories()
+                        && $record->assignedUsers->contains(Filament::auth()->id())
+                        && $record->require_signature
+                        && $record->signatories()
                             ->where('user_id', Filament::auth()->id())
                             ->whereNull('signed_at')
                             ->exists()
                     )
-                    /* ── modal de confirmación ─────────────────────────── */
                     ->requiresConfirmation()
                     ->modalHeading('Confirmar firma')
                     ->modalDescription('¿Está seguro de que desea firmar este documento?')
                     ->modalSubmitActionLabel('Firmar')
                     ->modalCancelActionLabel('Cancelar')
-
-                    /* ── acción de firmado ─────────────────────────────── */
                     ->action(function ($record) {
                         $record->signatories()
                             ->where('user_id', Filament::auth()->id())
@@ -246,16 +307,16 @@ class SgsstFileResource extends Resource
                             ->send();
                     }),
 
-                /* ========= Descargar =========== */
+                /* Descargar */
                 Action::make('download-direct')
                     ->label('Descargar')
                     ->icon('heroicon-o-arrow-down-tray')
                     ->url(fn($record) => Storage::url($record->file_path))
                     ->openUrlInNewTab(),
 
-                /* ========= Preview (ver / firmar) ========= */
+                /* Preview */
                 Action::make('preview')
-                    ->label(label: 'Ver')
+                    ->label('Ver')
                     ->icon('heroicon-o-eye')
                     ->modalHeading(fn($record) => $record->title)
                     ->modalWidth('full')
@@ -263,16 +324,15 @@ class SgsstFileResource extends Resource
                     ->modalContent(fn($record) => view(
                         'filament.components.file-preview',
                         [
-                            'record'  => $record->load('signatories', 'assignedUsers'),
+                            'record' => $record->load('signatories', 'assignedUsers'),
                             'canSign' => $record->require_signature
                                 && $record->signatories()
-                                ->where('user_id', Filament::auth()->id())
-                                ->whereNull('signed_at')
-                                ->exists(),
+                                    ->where('user_id', Filament::auth()->id())
+                                    ->whereNull('signed_at')
+                                    ->exists(),
                         ]
                     )),
 
-                /* ========= Edit / Delete sólo admin ========= */
                 EditAction::make()
                     ->visible(fn() => Filament::auth()->user()->hasRole('admin')),
 
@@ -286,13 +346,15 @@ class SgsstFileResource extends Resource
                     ->options(Empresa::pluck('nombre', 'id'))
                     ->visible(fn() => Filament::auth()->user()->hasRole('superadmin')),
             ])
+
             ->bulkActions([
                 DeleteBulkAction::make()
                     ->visible(fn() => Filament::auth()->user()->hasAnyRole(['admin', 'superadmin'])),
             ]);
     }
 
-    // ────────────────────────── PAGES ──────────────────────────
+    /* ─────────────────────────────── PAGES ──────────────────────────────── */
+
     public static function getPages(): array
     {
         return [
@@ -302,17 +364,19 @@ class SgsstFileResource extends Resource
         ];
     }
 
-    // ────────────────────────── QUERY SCOPING ──────────────────
+    /* ─────────────────────────── Mutators / Gates ───────────────────────── */
 
     public static function mutateFormDataBeforeCreate(array $data): array
     {
         if (!auth()->user()->hasRole('superadmin')) {
             $data['empresa_id'] = auth()->user()->empresa_id;
         }
+
         $data['require_signature'] = $data['require_signature'] ?? false;
-        if (! $data['require_signature']) {
+        if (!$data['require_signature']) {
             $data['signature_deadline'] = null;
         }
+
         return $data;
     }
 
@@ -321,30 +385,32 @@ class SgsstFileResource extends Resource
         if (!auth()->user()->hasRole('superadmin')) {
             $data['empresa_id'] = auth()->user()->empresa_id;
         }
+
         $data['require_signature'] = $data['require_signature'] ?? false;
-        if (! $data['require_signature']) {
+        if (!$data['require_signature']) {
             $data['signature_deadline'] = null;
         }
+
         return $data;
     }
+
+    /* ─────────────────────────────― Policies ―──────────────────────────── */
+
     public static function canCreate(): bool
     {
         return Filament::auth()->user()?->hasRole('admin');
     }
 
-    /** Solo los ADMIN pueden editar */
     public static function canEdit(Model $record): bool
     {
         return Filament::auth()->user()?->hasRole('admin');
     }
 
-    /** Solo los ADMIN pueden borrar */
     public static function canDelete(Model $record): bool
     {
         return Filament::auth()->user()?->hasRole('admin');
     }
 
-    /** Solo los ADMIN pueden borrar masivamente */
     public static function canDeleteAny(): bool
     {
         return Filament::auth()->user()?->hasRole('admin');

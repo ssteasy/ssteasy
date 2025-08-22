@@ -93,20 +93,28 @@
           class="absolute mt-2 w-48 bg-white rounded-md shadow-lg z-50 headerDrop"
         >
           <a
-            href="{{ url('/profile') }}"
+            href="{{ url('admin/profile') }}"
             class="block px-4 py-2 text-gray-800 hover:bg-gray-100"
           >
             Perfil
           </a>
-          <form method="POST" action="{{ url(config('filament.path') . '/logout') }}">
+          <form
+            x-ref="logoutForm"
+            method="POST"
+            action="{{ route('filament.admin.auth.logout') }}"
+            class="hidden"
+        >
             @csrf
-            <button
-                type="submit"
-                class="w-full text-left block px-4 py-2 text-gray-800 "
-            >
-                Cerrar sesión
-            </button>
         </form>
+
+        {{-- Botón que dispara el submit --}}
+        <button
+            type="button"
+            @click="$refs.logoutForm.submit()"
+            class="w-full text-left block px-4 py-2 text-gray-800 hover:bg-gray-100"
+        >
+            Cerrar sesión
+        </button>
         </div>
       </div>
     </div>
@@ -308,7 +316,7 @@
         <i x-show="navOpen"  class="fas fa-chevron-up"></i>
       </button>
 
-      <a href="#" class="app-header__side-link">
+      <a href="/admin/company" class="app-header__side-link">
         <i class="fas fa-building"></i>
         Mi empresa
       </a>

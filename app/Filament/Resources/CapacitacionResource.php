@@ -17,8 +17,8 @@ use Filament\Tables;
 use Filament\Tables\{Actions, Columns as T, Table};
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Facades\Filament;
-
-
+use Filament\Forms\Components\TextInput;
+use Filament\Tables\Filters\SelectFilter;
 use Illuminate\Support\Collection;
 
 
@@ -30,9 +30,9 @@ class CapacitacionResource extends Resource
 {
     protected static ?string $model = Capacitacion::class;
 
-    protected static ?string $navigationLabel  = 'Cursos';
-    protected static ?string $navigationGroup  = 'Capacitaciones';
-    protected static ?string $navigationIcon   = 'heroicon-o-academic-cap';
+    protected static ?string $navigationLabel = 'Cursos';
+    protected static ?string $navigationGroup = 'Gestión del conocimiento';
+    protected static ?string $navigationIcon = 'heroicon-o-academic-cap';
     public static function canViewAny(): bool
     {
         return auth()->user()->hasAnyRole(['superadmin', 'admin']);
@@ -57,10 +57,23 @@ class CapacitacionResource extends Resource
                     ->unique(ignoreRecord: true)
                     ->required(),
 
+                TextInput::make('categoria')
+                    ->label('Categoría')
+                    ->placeholder('Selecciona o escribe...')
+                    ->datalist(fn () => Capacitacion::query()
+                        ->whereNotNull('categoria')
+                        ->where('categoria', '!=', '')
+                        ->distinct()
+                        ->orderBy('categoria')
+                        ->pluck('categoria')
+                        ->toArray()
+                    )
+                    ->columnSpan(1),
+
                 F\TextInput::make('nombre_capacitacion')
                     ->required()
                     ->columnSpanFull(),
-                
+
                 FileUpload::make('miniatura')
                     ->label('Miniatura (imagen)')
                     ->image()
@@ -73,7 +86,7 @@ class CapacitacionResource extends Resource
                     ->label('Fecha de inicio (opcional)')
                     ->nullable()
                     ->columnSpan(1),
-    
+
                 DatePicker::make('fecha_fin')
                     ->label('Fecha fin (opcional)')
                     ->nullable()
@@ -86,8 +99,8 @@ class CapacitacionResource extends Resource
                 F\Select::make('tipo_asignacion')
                     ->label('Modo de asignación')
                     ->options([
-                        'manual'      => 'Asignación manual',
-                        'abierta'     => 'Curso abierto (colaborador se inscribe)',
+                        'manual' => 'Asignación manual',
+                        'abierta' => 'Curso abierto (colaborador se inscribe)',
                         'obligatoria' => 'Obligatoria para todos',
                     ])
                     ->default('manual')
@@ -96,27 +109,29 @@ class CapacitacionResource extends Resource
                     ->columnSpan(2),
                 MultiSelect::make('participantes')
                     ->label('Colaboradores asignados')
-                
+
                     ->relationship('participantes', 'id')
-                    ->options(fn () =>
+                    ->options(
+                        fn() =>
                         User::where('empresa_id', Filament::auth()->user()->empresa_id)
                             ->get()
-                            ->mapWithKeys(fn ($u) => [
+                            ->mapWithKeys(fn($u) => [
                                 $u->id => "{$u->primer_nombre} {$u->primer_apellido} – {$u->numero_documento}"
                             ])
                     )
-                    ->getOptionLabelFromRecordUsing(fn (User $u) =>
+                    ->getOptionLabelFromRecordUsing(
+                        fn(User $u) =>
                         "{$u->primer_nombre} {$u->primer_apellido} – {$u->numero_documento}"
                     )
                     ->preload()
                     ->searchable()
-                
+
                     /* --- reglas que ahora sí se reevaluarán --- */
-                    ->required(fn (Get $get) => $get('tipo_asignacion') === 'manual')
-                    ->dehydrated(fn (Get $get) => $get('tipo_asignacion') === 'manual')
-                    ->hidden(fn (Get $get) => $get('tipo_asignacion') !== 'manual')
+                    ->required(fn(Get $get) => $get('tipo_asignacion') === 'manual')
+                    ->dehydrated(fn(Get $get) => $get('tipo_asignacion') === 'manual')
+                    ->hidden(fn(Get $get) => $get('tipo_asignacion') !== 'manual')
                     /* ------------------------------------------ */
-                
+
                     ->columnSpanFull(),
 
             ])
@@ -133,6 +148,11 @@ class CapacitacionResource extends Resource
                 T\TextColumn::make('codigo_capacitacion')
                     ->searchable()
                     ->sortable(),
+
+                T\TextColumn::make('categoria')
+                    ->label('Categoría')
+                    ->sortable()
+                    ->searchable(),
 
                 T\TextColumn::make('nombre_capacitacion')
                     ->wrap()
@@ -154,6 +174,15 @@ class CapacitacionResource extends Resource
             ])
             ->filters([
                 TernaryFilter::make('activa'),
+                SelectFilter::make('categoria')
+                    ->label('Categoría')
+                    ->options(
+                        fn() => Capacitacion::query()
+                            ->pluck('categoria', 'categoria')
+                            ->filter()         // elimina null/strings vacíos
+                            ->unique()
+                            ->toArray()
+                    ),
             ])
             ->actions([
                 Actions\ViewAction::make(),
@@ -189,7 +218,7 @@ class CapacitacionResource extends Resource
                     ),
             ])
             ->bulkActions([
-                
+
                 Actions\DeleteBulkAction::make(),
             ]);
     }
@@ -207,10 +236,10 @@ class CapacitacionResource extends Resource
     public static function getPages(): array
     {
         return [
-            'index'  => Pages\ListCapacitacions::route('/'),
+            'index' => Pages\ListCapacitacions::route('/'),
             'create' => Pages\CreateCapacitacion::route('/create'),
-            'edit'   => Pages\EditCapacitacion::route('/{record}/edit'),
-            'curso'  => Curso::route('/{record}/curso'),
+            'edit' => Pages\EditCapacitacion::route('/{record}/edit'),
+            'curso' => Curso::route('/{record}/curso'),
         ];
     }
 }

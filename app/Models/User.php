@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Spatie\Permission\Traits\HasRoles;
 use Laravel\Sanctum\HasApiTokens;
 
@@ -81,7 +81,7 @@ class User extends Authenticatable
 
 
 
-      public function getNameAttribute(): string
+    public function getNameAttribute(): string
     {
         return trim("{$this->nombres} {$this->apellidos}");
     }
@@ -89,12 +89,12 @@ class User extends Authenticatable
     {
         return $this->belongsTo(Pais::class, 'pais_dane', 'codigo');
     }
-    
+
     public function departamento()
     {
         return $this->belongsTo(Departamento::class, 'departamento_dane', 'codigo');
     }
-    
+
     public function municipio()
     {
         return $this->belongsTo(Municipio::class, 'municipio_dane', 'codigo');
@@ -125,19 +125,26 @@ class User extends Authenticatable
     public function capacitaciones()
     {
         return $this->belongsToMany(Capacitacion::class, 'capacitacion_user')
-                    ->withPivot('estado')   // Solo 'estado' (y si quieres, ->withTimestamps())
-                    ->withTimestamps();
+            ->withPivot('estado')   // Solo 'estado' (y si quieres, ->withTimestamps())
+            ->withTimestamps();
     }
     public function certificados()
     {
         return $this->hasMany(Certificado::class);
     }
     // app/Models/User.php
-public function getFullNameAttribute(): string
-{
-    $nombre = trim("{$this->primer_nombre} {$this->primer_apellido}");
+    public function getFullNameAttribute(): string
+    {
+        $nombre = trim("{$this->primer_nombre} {$this->primer_apellido}");
 
-    return $nombre !== '' ? $nombre : "Usuario {$this->id}";
-}
-
+        return $nombre !== '' ? $nombre : "Usuario {$this->id}";
+    }
+    public function encuestas(): BelongsToMany
+    {
+        return $this
+            ->belongsToMany(Encuesta::class, 'encuesta_user')
+            ->withPivot(['respuestas', 'respondida', 'respondido_at'])
+            ->withTimestamps();
+    }
+    
 }

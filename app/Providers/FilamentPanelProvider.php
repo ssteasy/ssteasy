@@ -1,10 +1,11 @@
 <?php
 
 namespace App\Providers;
-
+use Filament\Facades\Filament;
+use Illuminate\Support\ServiceProvider;
 use Filament\PanelProvider;
 
-class FilamentPanelProvider extends PanelProvidert;
+class FilamentPanelProvider extends PanelProvidert
 {
     public function boot(): void
     {

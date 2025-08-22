@@ -18,11 +18,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class CargoResource extends Resource
 {
-    public static function getNavigationGroup(): ?string
-    {
-        return 'Mi Empresa';
-    }
 
+    protected static ?string $navigationGroup = 'Gestión Empresarial';
     protected static ?string $navigationIcon = 'heroicon-o-puzzle-piece';
     protected static ?string $model = Cargo::class;
 

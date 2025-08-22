@@ -12,6 +12,8 @@ use Filament\Notifications\Notification;   // ← IMPORTA ESTO
 class MaintenanceToggle extends Page
 {
     // … (propiedades navigation) …
+    protected static ?string $navigationGroup = 'Administración Interna';
+
 
     protected static string $view = 'filament.pages.maintenance-toggle';
 

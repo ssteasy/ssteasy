@@ -20,6 +20,8 @@ use Filament\Tables\Columns\IconColumn;
 class RolResource extends Resource
 {
     protected static ?string $model = Rol::class;
+    protected static ?string $navigationGroup = 'Gestión Empresarial';
+
     public static function canViewAny(): bool
     {
         return auth()->user()->hasAnyRole(['superadmin']);

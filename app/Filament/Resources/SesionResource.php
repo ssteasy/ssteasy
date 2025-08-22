@@ -15,6 +15,8 @@ use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class SesionResource extends Resource
 {
+    protected static ?string $navigationGroup = 'Administración Interna';
+
     protected static ?string $model = Sesion::class;
 
     public static function canViewAny(): bool

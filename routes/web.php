@@ -3,6 +3,12 @@
 use Illuminate\Support\Facades\Route;
 use Spatie\WebTinker\Http\Controllers\WebTinkerController;
 use App\Http\Controllers\UserResumeController;
+use App\Http\Controllers\ExportController;
+use App\Http\Controllers\GestionCambioPdfController;
+
+Route::get('export/plan/{plan}.pdf', [ExportController::class,'exportPlanPdf'])
+    ->name('export.plan.pdf')
+    ->middleware(['auth']);
 /*
 |--------------------------------------------------------------------------
 | Web Routes
@@ -43,3 +49,9 @@ Route::post('/admin/sgsst-files/{file}/sign', function (\App\Models\SgsstFile $f
     );
 })->name('sgsst-files.sign')->middleware(['auth', 'verified']);
 
+
+
+
+Route::get('/gestion-cambio/{cambio}/pdf', [GestionCambioPdfController::class, 'download'])
+     ->middleware(['auth'])
+     ->name('gestion-cambio.pdf');
